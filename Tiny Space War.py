@@ -1,47 +1,254 @@
-import pygame, os, sys, random
+from Script import script
+from Sprites import *
+from Utils import *
+import pygame
+import random
+import sys
+import os
 
-black = (0,0,0)
-white = (255,255,255)
+# idea: use mirrored movement for epic formation battle scene
 
-# Version 1.2.1
-    # Made changes to the following assets:
-        # All spaceships
-        # Background
-        # Bullet
-        # Score/level Font
-    # Darkened stars to reduce visible clutter
-    # Added music mute toggle
+BLACK = (0)
+WHITE = (255,255,255)
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 
-# add power-ups
-    # fall from top at half enemy speed
-    # triple gun
-    # laser beam
-# add settings page
-# add score saves
 
-class Player(pygame.sprite.Sprite):
+class TinySpaceWar:
     def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = get_image('Assets\\Fighter 1.png')
-       self.rect = self.image.get_rect()
+        self.setup_pygame()
 
-class Button(pygame.sprite.Sprite):
-    def __init__(self, x, y, buttonImg, identifier):
-        pygame.sprite.Sprite.__init__(self)
-        self.x = x
-        self.y = y
-        self.text = identifier
-        self.image = get_image(buttonImg)
-        self.rect = self.image.get_rect()
-        self.rect.x = self.x
-        self.rect.y = self.y
+    def setup_pygame(self):
+        pygame.mixer.pre_init(44100, -16, 1, 512)  # Pre-init mixer: reduces audio delay
+        pygame.init()
+        pygame.display.set_caption('Tiny Space War')
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+        pygame.mixer.music.load('Assets/tinyspaceships.mp3')
+        pygame.mixer.music.play(-1)  # Loop
+        pygame.mixer.music.set_volume(0)
+        self.clock = pygame.time.Clock()
+
+    def check_universal_events(self, event, pressed_keys):
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        elif event.type == pygame.KEYDOWN:
+            alt_pressed = pressed_keys[pygame.K_LALT] or \
+                            pressed_keys[pygame.K_RALT]
+            if event.key == pygame.K_F4 and alt_pressed:
+                pygame.quit()
+                sys.exit()
+            # Change to pause menu
+            '''
+            elif event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
+            '''
+
+    def drawText(self, text, size, x, y, color=WHITE, center=True, fontstr='freesansbold.ttf'):
+        lines = text.splitlines()
+        for i, l in enumerate(lines):
+            font = pygame.font.Font(fontstr, size)
+            text = font.render(l, True, color)
+            if center:
+                self.screen.blit(text, (x-(text.get_width()//2), y-(text.get_height()//2)+(size*i)))
+            else:
+                self.screen.blit(text, (x, y+(size*i)))
+
+
+class GameState:
+    def __init__(self):
+        self.state = 'main menu'
+
+    def main_menu(self):
+        pygame.mouse.set_visible(True)
+        pygame.event.set_grab(False)
+        self.allSprites = pygame.sprite.Group()
+        # Stars
+        self.starList = pygame.sprite.Group()
+        for i in range(0, 100):
+            star = Star()
+            self.starList.add(star)
+            self.allSprites.add(star)
+        # Player
+        self.player = Player()
+        self.player.rect.x = SCREEN_WIDTH//2 - (self.player.rect.w//2)
+        self.player.rect.y = SCREEN_HEIGHT//2 - 100
+        self.allSprites.add(self.player)
+        # Buttons
+        buttons = [Button("NEW GAME", (SCREEN_WIDTH//2, 800)), Button("LOAD GAME", (SCREEN_WIDTH//2, 860)),
+                   Button("OPTIONS", (SCREEN_WIDTH//2, 920)), Button("QUIT", (SCREEN_WIDTH//2, 980))]
+
+        self.next_scene = False
+        while self.state == 'main menu':
+            pressed_keys = pygame.key.get_pressed()
+            for event in pygame.event.get():
+                game.check_universal_events(event, pressed_keys)           
+                for button in buttons:
+                    button.update(event)
+            self.starList.update(self)
+
+            game.screen.blit(get_image('Assets/Nebula Blue.png'), (0, 0))
+            self.allSprites.draw(game.screen)
+            for button in buttons:
+                button.draw()
+            game.drawText("Tiny", 45, SCREEN_WIDTH//2-210, 110, (252, 202, 24))
+            game.drawText("Space War", 90, SCREEN_WIDTH//2+100, 100, (252, 202, 24))
+            pygame.display.flip()
+            game.clock.tick(60)
+
+    def chapter_one(self):
+        # Script
+        script_counter = 0
+        transition = Transition()
+        game.animation = SquadronAnimation()
+        while True:
+            pressed_keys = pygame.key.get_pressed()
+            for event in pygame.event.get():
+                game.check_universal_events(event, pressed_keys)
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if script_counter != 9 and script_counter != 18:
+                        script_counter += 1
+            self.starList.update(self)
+
+            game.screen.blit(get_image('Assets/Nebula Blue.png'), (0, 0))
+            self.allSprites.draw(game.screen)
+            game.animation.update(script_counter)
+            if script_counter == 9 or script_counter == 18:
+                transition.update()
+                if transition.done:
+                    transition.reset()
+                    script_counter += 1
+            elif script_counter != 20:
+                game.screen.blit(get_image('Assets/textBox.png'), (SCREEN_WIDTH//2 - (800//2), SCREEN_HEIGHT-150-10))
+                game.drawText(script[script_counter][0], 18, (SCREEN_WIDTH//2 - (800//2)) + 20, (SCREEN_HEIGHT-150-30), WHITE, False)
+                game.drawText(script[script_counter][1], 18, (SCREEN_WIDTH//2 - (800//2)) + 20, (SCREEN_HEIGHT-150+10), WHITE, False)
+            pygame.display.flip()
+            game.clock.tick(60)
+
+    def chapter_one_scene_two(self):
+        pygame.mouse.set_visible(False)
+        pygame.event.set_grab(True)
+        # bullets
+        self.bullet_list = pygame.sprite.Group()
+        # enemies
+        self.enemies = pygame.sprite.Group()
+        # script
+        framecount = 0
+        script_counter = 0
+
+        self.next_scene = False
+        while not self.next_scene:
+            pressed_keys = pygame.key.get_pressed()
+            for event in pygame.event.get():
+                self.check_universal_events(event, pressed_keys)
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if script_counter == 0:
+                        play_sound('Assets\pew.wav')
+                        bullet = Bullet(self.player.rect.x+self.player.rect.w+13, self.player.rect.y+(self.player.rect.h//2)-4, 10)
+                        self.allSprites.add(bullet)
+                        self.bullet_list.add(bullet)
+                    else:
+                        script_counter += 1
+            self.player.update_movement(pressed_keys)
+            self.allSprites.update(self)
+
+            # wait 5 seconds to spawn enemies
+            framecount += 1
+            if framecount == (60*5):
+                for x in range(5):
+                    enemy = Enemy()
+                    self.enemies.add(enemy)
+                    self.allSprites.add(enemy)
+
+            for bullet in self.bullet_list:
+                sprites_hit = pygame.sprite.spritecollide(bullet, self.allSprites, False)
+                for sprite in sprites_hit:
+                    if sprite in self.enemies:
+                        play_sound('Assets\hitEnemy.wav')
+                        self.bullet_list.remove(bullet)
+                        self.allSprites.remove(bullet)
+                        sprite.health -= 10
+                        if sprite.health == 0:
+                            self.allSprites.remove(sprite)
+                            self.enemies.remove(sprite)
+                    elif sprite == self.player:
+                        sprite.health -= 10
+                if bullet.rect.y < -10:
+                    self.bullet_list.remove(bullet)
+                    self.allSprites.remove(bullet)
+
+            self.screen.blit(get_image('Assets/Nebula Blue.png'), (0, 0))
+            self.allSprites.draw(self.screen)
+            pygame.display.flip()
+            self.clock.tick(60)
+
+    def state_manager(self):
+        if self.state == 'main menu':
+            self.main_menu()
+        elif self.state == 'chapter one':
+            self.chapter_one()
+        elif self.state == 'chapter one scene two':
+            self.chapter_one_scene_two()
+
+
+class SquadronAnimation:
+    def __init__(self):
+        self.image = get_image('Assets\\Fighter 1.png')
+        self.x = -200
+        self.y = SCREEN_HEIGHT//2-100
+
+    def update(self, script_counter):
+        if 18>script_counter>9:
+            if not(self.x >= (SCREEN_WIDTH//2-(144/2)-100)):
+                self.x += 10
+        elif script_counter > 19:
+            if not(self.x <= -200):
+                self.x -= 10
+            else:
+                game.next_scene = True
+        game.screen.blit(self.image, (self.x, self.y-100))
+        game.screen.blit(self.image, (self.x-100, self.y))
+        game.screen.blit(self.image, (self.x, self.y+100))
+
+
+class Transition:
+    def __init__(self):
+        self.transition_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
+        self.alpha = 1
+        self.delta = 2
+        self.done = False
+
+    def update(self):
+        self.alpha += self.delta
+        if self.alpha == 255:
+            self.delta *= -1
+        elif self.alpha == 1:
+            self.done = True
+        self.transition_surf.fill((0, 0, 0, self.alpha))
+        game.screen.blit(self.transition_surf, (0, 0))
+
+    def reset(self):
+        self.alpha = 1
+        self.delta = 2
+        self.done = False
+
+
+class Button:
+    def __init__(self, text, pos):
+        self.menu_font = pygame.font.Font(None, 70)
+        self.hovered = False
+        self.text = text
+        self.pos = pos
+        self.set_rect()
+        self.draw()
         self.soundFlag = False
         self.showBorder = False
 
     def update(self, event):
-        # update flags for glow and mouseover
-        pos = pygame.mouse.get_pos()
-        if self.rect.collidepoint(pos[0], pos[1]):
+        if self.rect.collidepoint(pygame.mouse.get_pos()):
+            self.hovered = True
+            # update flags for glow and mouseover
             if self.soundFlag:
                 play_sound('Assets\\mouseover.wav')
             self.soundFlag = False
@@ -51,423 +258,36 @@ class Button(pygame.sprite.Sprite):
                 if self.text == 'QUIT':
                     pygame.quit()
                     sys.exit()
-                elif self.text == 'START':
-                    mainGameLoop()
+                elif self.text == 'NEW GAME':
+                    game_state.state = 'chapter one'
                 elif self.text == 'MAIN MENU':
-                    mainMenu()
+                    game_state.state = 'main menu'
         else:
+            self.hovered = False
             self.showBorder = False
             self.soundFlag = True
-
-    def draw(self):
-        if self.showBorder:
-            pygame.draw.rect(screen, (136,0,27), (self.x-5, self.y-5, self.rect.w+10, self.rect.h+10), 5)
-        screen.blit(self.image, self.rect)
-
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = get_image('Assets\\Alien 2.png')
-       self.rect = self.image.get_rect()
-       self.rect.x = random.randint(0,1920)
-       self.rect.y = random.randint(-2000, 0)
-
-    def update(self):
-        self.rect.y += 2
-        if self.rect.y > 1090:
-            self.rect.x = random.randint(0, 1920)
-            self.rect.y = random.randint(-2000, -10)
-
-
-class FastEnemy(pygame.sprite.Sprite):
-    def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = get_image('Assets\\Alien 1.png')
-       self.rect = self.image.get_rect()
-       self.rect.x = random.randint(0,1920)
-       self.rect.y = random.randint(-2000, 0)
-
-    def update(self):
-        self.rect.y += 4
-        if self.rect.y > 1090:
-            self.rect.x = random.randint(0, 1920)
-            self.rect.y = random.randint(-2000, -10)
-
-
-class SideEnemy(pygame.sprite.Sprite):
-    def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = get_image('Assets\\Alien 4l.png')
-       self.rect = self.image.get_rect()
-       self.rect.x = random.randint(-2000, 0)
-       self.rect.y = random.randint(0, 1080)
-
-    def update(self):
-        self.rect.x += 2
-        if self.rect.x > 1930:
-            self.rect.x = random.randint(-2000, -10)
-            self.rect.y = random.randint(0, 1080)
-
-
-class rSideEnemy(pygame.sprite.Sprite):
-    def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = get_image('Assets\\Alien 4r.png')
-       self.rect = self.image.get_rect()
-       self.rect.x = random.randint(-2000, 0)
-       self.rect.y = random.randint(0, 1080)
-
-    def update(self):
-        self.rect.x -= 2
-        if self.rect.x < -10:
-            self.rect.x = random.randint(1930, 4000)
-            self.rect.y = random.randint(0, 1080)
-
-
-class Bullet(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = pygame.Surface([4, 10])
-        self.image.fill(white)
-        self.image = get_image('Assets\\Missile.png')
-        self.rect = self.image.get_rect()
-        
-    def update(self):
-        self.rect.y -= 5
-
-
-class Star(pygame.sprite.Sprite):
-    def __init__(self):
-       pygame.sprite.Sprite.__init__(self)
-       self.image = pygame.Surface([1, 20])
-       self.image.fill((50,50,50))
-       self.rect = self.image.get_rect()
-       self.rect.x = random.randint(0, 1920)
-       self.rect.y = random.randint(0, 1080)
-
-    def update(self):
-        self.rect.y += 8
-        if self.rect.y > 1090:
-            self.rect.y = random.randint(-2000, -10)
-            self.rect.x = random.randint(0, 1920)
-
-class Checkbox:
-    def __init__(self, x, y, name):
-        self.x = x
-        self.y = y
-        self.name = name
-        self.rect = pygame.Rect(self.x, self.y, 40, 40)
-        self.color = (200,200,200)
-        self.checkmark = False
-        self.image = get_image('Assets\\checkmark.png')
-
-    def handleEvent(self, event):
-        global masterVolume
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                self.checkmark = not self.checkmark
-                if masterVolume > 0:
-                    masterVolume = 0
-                else:
-                    masterVolume = 0.5
-                pygame.mixer.music.set_volume(masterVolume)
-                
  
     def draw(self):
-        message_display(self.name, self.x-120, self.y+19, 25)
-        pygame.draw.rect(screen, self.color, (self.x, self.y, 40, 40))
-        pygame.draw.rect(screen, black, (self.x+2, self.y+2, 35, 35))
-        if self.checkmark:
-            screen.blit(self.image, (self.x-25, self.y-40))
-
-def text_objects(text, font):
-    textSurface = font.render(text, True, white)
-    return textSurface, textSurface.get_rect()
-
-def message_display(text, x, y, fontSize):
-    font = pygame.font.Font('Assets\\INVASION2000.ttf', fontSize)
-    TextSurf, TextRect = text_objects(text, font)
-    TextRect.center = (x, y)
-    screen.blit(TextSurf, TextRect)
-
-_image_library = {}
-def get_image(path):
-    global _image_library
-    image = _image_library.get(path)
-    if image == None:
-        canonicalized_path = path.replace('/', os.sep).replace('\\', os.sep)
-        image = pygame.image.load(canonicalized_path)
-        _image_library[path] = image
-    return image
-
-_sound_library = {}
-def play_sound(path):
-    global _sound_library
-    sound = _sound_library.get(path)
-    if sound == None:
-        canonicalized_path = path.replace('/', os.sep).replace('\\', os.sep)
-        sound = pygame.mixer.Sound(canonicalized_path)
-        _sound_library[path] = sound
-    sound.set_volume(0.5)
-    sound.play()
-
-masterVolume = 0.5
-
-pygame.mixer.pre_init(44100, -16, 1, 512) # pre-initialize mixer: reduces audio delay
-pygame.init()
-pygame.display.set_caption('Tiny Space War')
-screen = pygame.display.set_mode((1920, 1080), pygame.FULLSCREEN)
-
-pygame.mixer.music.load('Assets\\tinyspaceships.mp3')
-pygame.mixer.music.play(-1) # -1 = loop
-pygame.mixer.music.set_volume(masterVolume)
-checkbox = Checkbox(1860,1030,'Toggle mute (M)')
-
-# Main Menu
-# --------------------------------------------------------------------------------------------------
-def mainMenu():
-    global masterVolume
-    pygame.mouse.set_visible(True)
-    pygame.event.set_grab(False)
-    
-    allSprites = pygame.sprite.Group()
-    starList = pygame.sprite.Group()
-    for i in range(0, 100):
-        starList.add(Star())
-    for star in starList:
-        allSprites.add(star)
-
-    buttons = [Button(715,700,'Assets\\startButton.png','START'),
-               Button(715,900,'Assets\\quitBtn.png','QUIT')]
-
-    clock = pygame.time.Clock()
-    while True:
-        pressed_keys = pygame.key.get_pressed()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                alt_pressed = pressed_keys[pygame.K_LALT] or \
-                                pressed_keys[pygame.K_RALT]
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_F4 and alt_pressed:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_m:
-                    if masterVolume > 0:
-                        masterVolume = 0
-                    else:
-                        masterVolume = 0.5
-                    pygame.mixer.music.set_volume(masterVolume)
-                    checkbox.checkmark = not checkbox.checkmark
-                                
-            for button in buttons:
-                button.update(event)
-            checkbox.handleEvent(event)
-        starList.update()
+        self.set_rend()
+        game.screen.blit(self.rend, self.rect)
         
-        screen.fill(black)
-        screen.blit(get_image('Assets\\Nebula Blue.png'), (0,0))
-        starList.draw(screen)
-        screen.blit(get_image('Assets\\instructions.png'), (530, 100))
-        for button in buttons:
-            button.draw()
-        checkbox.draw()
-        pygame.display.flip()
-        clock.tick(120)
-# --------------------------------------------------------------------------------------------------
-
-
-
-# Game
-# --------------------------------------------------------------------------------------------------
-def mainGameLoop():
-    pygame.mouse.set_visible(False)
-    pygame.event.set_grab(True)
-    global score
-    global masterVolume
-    global allSprites
-    x = 910
-    y = 950
-    
-    bullet_list = pygame.sprite.Group()
-    allSprites = pygame.sprite.Group()
-    starList = pygame.sprite.Group()
-    enemies = pygame.sprite.Group()
-    
-    player = Player()
-    allSprites.add(player)
-
-    for i in range(0, 20):
-        enemies.add(Enemy())
-    for enemy in enemies:
-        allSprites.add(enemy)
-
-    for i in range(0, 100):
-        starList.add(Star())
-    for star in starList:
-        allSprites.add(star)
-
-    score = 0
-    level = 1
-    req1 = 1000
-    req2 = 2000
-    req3 = 3000
-    prevScore = 0
-
-    clock = pygame.time.Clock()
-    while True:
-        pressed_keys = pygame.key.get_pressed()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                alt_pressed = pressed_keys[pygame.K_LALT] or \
-                                pressed_keys[pygame.K_RALT]
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_F4 and alt_pressed:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_m:
-                    if masterVolume > 0:
-                        masterVolume = 0
-                    else:
-                        masterVolume = 0.5
-                    pygame.mixer.music.set_volume(masterVolume)
-                    checkbox.checkmark = not checkbox.checkmark
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: # 1 = LEFT, 2 = MIDDLE, 3 = RIGHT
-                play_sound('Assets\pew.wav')
-                bullet = Bullet()
-                bullet.rect.x = (player.rect.x + 44) # Set the bullet so it is where the player is
-                bullet.rect.y = player.rect.y
-                allSprites.add(bullet)
-                bullet_list.add(bullet)
-                
-        if y > 1:
-            if pressed_keys[pygame.K_w] or pressed_keys[pygame.K_UP]: y -= 5
-        if y < 990:
-            if pressed_keys[pygame.K_s] or pressed_keys[pygame.K_DOWN]: y += 5
-        if x > 0:
-            if pressed_keys[pygame.K_a] or pressed_keys[pygame.K_LEFT]: x -= 5
-        if x < 1820:
-            if pressed_keys[pygame.K_d] or pressed_keys[pygame.K_RIGHT]: x += 5
-        player.rect.x = x
-        player.rect.y = y
+    def set_rend(self):
+        self.rend = self.menu_font.render(self.text, True, self.get_color())
         
-        if pygame.sprite.spritecollide(player, enemies, True):
-            play_sound('Assets\death.wav')
-            gameOver()
-        allSprites.update()
-            
-        screen.fill(black)
-        screen.blit(get_image('Assets\\Nebula Blue.png'), (0,0))
-        allSprites.draw(screen)
-        message_display('Score: ' + str(score), 300, 50, 85)
-        message_display('Level ' + str(level), 1700, 50, 85)
-
-        for bullet in bullet_list:
-            block_hit_list = pygame.sprite.spritecollide(bullet, enemies, True) # See if it hit a block
-            for block in block_hit_list: # For each block hit, remove the bullet and add to the score
-                play_sound('Assets\hitEnemy.wav')
-                bullet_list.remove(bullet)
-                allSprites.remove(bullet)
-                score += 100
-            if bullet.rect.y < -10: # Remove the bullet if it flies up off the screen
-                bullet_list.remove(bullet)
-                allSprites.remove(bullet)
+    def get_color(self):
+        if self.hovered:
+            return (252, 202, 24)
+        else:
+            return (100, 100, 100)
         
-        # if score/req has a remainder of 0 (a multiple of req), activate
-        if prevScore != score:
-            if score == req1:
-                level += 1
-                req1 += 1000
-                play_sound('Assets\levelUp.wav')
-                for i in range(0, 10):
-                    newEnemy = Enemy()
-                    enemies.add(newEnemy)
-                    allSprites.add(newEnemy)
-            if score == req2:
-                level += 1
-                req2 += 2000
-                play_sound('Assets\levelUp.wav')
-                for i in range(0, 10):
-                    newEnemy = FastEnemy()
-                    enemies.add(newEnemy)
-                    allSprites.add(newEnemy)
-            if score == req3:
-                level += 1
-                req3 += 3000
-                play_sound('Assets\levelUp.wav')
-                for i in range(0, 5):
-                    newEnemy = SideEnemy()
-                    enemies.add(newEnemy)
-                    allSprites.add(newEnemy)
-                    
-                    newEnemy = rSideEnemy()
-                    enemies.add(newEnemy)
-                    allSprites.add(newEnemy)
-        prevScore = score
-                
-        pygame.display.flip()
-        clock.tick(120)
-# --------------------------------------------------------------------------------------------------
+    def set_rect(self):
+        self.set_rend()
+        self.rect = self.rend.get_rect()
+        self.rect.center = self.pos
 
 
-
-# Game Over
-# --------------------------------------------------------------------------------------------------
-def gameOver():
-    pygame.mouse.set_visible(True)
-    pygame.event.set_grab(False)
-    global allSprites
-    global masterVolume
-    global score
-
-    buttons = [Button(740,600,'Assets\\playAgainBtn.png','START'),
-               Button(740,800,'Assets\\mmBtn.png','MAIN MENU')]
-
-    clock = pygame.time.Clock()
+if __name__ == "__main__":
+    game = TinySpaceWar()
+    game_state = GameState()
     while True:
-        pressed_keys = pygame.key.get_pressed()
-        pos = pygame.mouse.get_pos()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                alt_pressed = pressed_keys[pygame.K_LALT] or \
-                              pressed_keys[pygame.K_RALT]
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_F4 and alt_pressed:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == pygame.K_m:
-                    if masterVolume > 0:
-                        masterVolume = 0
-                    else:
-                        masterVolume = 0.5
-                    pygame.mixer.music.set_volume(masterVolume)
-                    checkbox.checkmark = not checkbox.checkmark
-                                
-            for button in buttons:
-                button.update(event)
-
-        screen.fill(black)
-        screen.blit(get_image('Assets\\Nebula Blue.png'), (0,0))
-        allSprites.draw(screen)
-        message_display('Final Score: ' + str(score), 950, 200, 85)
-        for button in buttons:
-            button.draw()
-        pygame.display.flip()
-        clock.tick(120)
-# --------------------------------------------------------------------------------------------------
-
-mainMenu()
+        game_state.state_manager()
